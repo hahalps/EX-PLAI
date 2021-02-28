@@ -1,2 +1,1 @@
 # EX-PLAI
-just exercise
