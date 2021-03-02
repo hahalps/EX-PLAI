@@ -15,10 +15,10 @@
 (define-type Value
   [numV (n : number)]
   [closV (arg : symbol) (body : ExprC) (env : Env)]
-  [boxV (v : Value)])
+  [boxV (v : Location)])
 
-(define Result
-  [v*s (V : Value) (s : Store)])
+(define-type Result
+  [v*s (v : Value) (s : Store)])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -44,30 +44,60 @@
 (define-type Storage
   [cell (location : Location) (val : Value)])
 
-(define-type-alias Strore (listof Stroage))
+(define-type-alias Store (listof Storage))
 
 (define mt-store empty)
 (define override-store cons)
 
-(define (fetch [loc : Location] [sto : Strore]) : Value
+(define (fetch [loc : Location] [sto : Store]) : Value
   (cond [(empty? sto) (error 'lookup "location not found")]
-        [else (cond [(equal? s (cell-location (first sto)))
+        [else (cond [(equal? loc (cell-location (first sto)))
                      (cell-val (first sto))]
-                    [else (fetch s (rest sto))])]))
+                    [else (fetch loc (rest sto))])]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (interp [expr : ExprC] [env : Env] [sto : Store]) : Result
-  <ms-numC-case>
-  <ms-idC-case>
-  <ms-appC-case>
-  <ms-plusC/multC-case>
-  <ms-lamC-case>
-  <ms-boxC-case>
-  <ms-unboxC-case>
-  <ms-setboxC-case>
-  <ms-seqC-case>)
+  (type-case ExprC expr
+    [numC (n) (v*s (numV n) sto)]
+    [idC (s) (v*s (fetch (lookup s env) sto) sto)]
+    [appC (f a) (type-case Result (interp f env sto)
+                  (v*s (v-f s-f)
+                       (type-case Result (interp a env s-f)
+                         (v*s (v-a s-a)
+                              (let ([where (new-loc)])
+                                (interp (closV-body v-f)
+                                        (extend-env (bind (closV-arg v-f)
+                                                          where)
+                                                    (closV-env v-f))
+                                        (override-store (cell where v-a)
+                                                        s-a)))))))]
+    [plusC (l r) (type-case Result (interp l env sto)
+                   [v*s (v-l s-l)
+                        (type-case Result (interp r env s-l)
+                          (v*s (v-r s-r) (v*s (num+ v-l v-r) s-r)))])]
+    [multC (l r) (type-case Result (interp l env sto)
+                   [v*s (v-l s-l)
+                        (type-case Result (interp r env s-l)
+                          (v*s (v-r s-r) (v*s (num* v-l v-r) s-r)))])]
+    [lamC (a b) (v*s (closV a b env) sto)]
+    [boxC (a) (type-case Result (interp a env sto)
+                (v*s (v-a s-a)
+                     (let ([where (new-loc)])
+                       (v*s (boxV where) (override-store (cell where v-a)
+                                                         s-a)))))]
+    [unboxC (a) (type-case Result (interp a env sto)
+                  (v*s (v-a s-a) (v*s (fetch (boxV-v v-a) s-a)
+                                      s-a)))]
+    [setboxC (b v) (type-case Result (interp b env sto)
+                     (v*s (v-b s-b)
+                          (type-case Result (interp v env s-b)
+                            (v*s (v-v s-v)
+                                 (v*s v-v (override-store (cell (boxV-v v-b) v-v)
+                                                          s-v))))))]
+    [seqC (b1 b2) (type-case Result (interp b1 env sto)
+                    [v*s (v-b1 s-b1) (interp b2 env s-b1)])]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -78,6 +108,16 @@
       (begin
         (set-box! n (add1 (unbox n)))
         (unbox n)))))
+
+(define (num+ [a : Value] [b : Value]) : Value
+  (cond [(and (numV? a) (numV? b))
+         (numV (+ (numV-n a) (numV-n b)))]
+        [else (error 'num+ "one argument was not a number")]))
+
+  (define (num* [a : Value] [b : Value]) : Value
+  (cond [(and (numV? a) (numV? b))
+         (numV (* (numV-n a) (numV-n b)))]
+        [else (error 'num* "one argument was not a number")]))
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                               test
@@ -87,9 +127,11 @@
 ;                (set-box! b (+ 1 (unbox b))))
 ;         (unbox b)))
 
-(test (interp (appC (lamC (idC 'b) (seqC (seqC (setboxC (idC 'b) (plusC (numC 1) (unboxC (idC 'b))))
-                                               (setboxC (idC 'b) (plusC (numC 1) (unboxC (idC 'b)))))
-                                         (unboxC (idC 'b))))
-                    (boxC (numC 0)))
-      2))
-                           
+(test (v*s-v (interp (appC (lamC 'b (seqC (seqC (setboxC (idC 'b) (plusC (numC 1) (unboxC (idC 'b))))
+                                                (setboxC (idC 'b) (plusC (numC 1) (unboxC (idC 'b)))))
+                                          (unboxC (idC 'b))))
+                           (boxC (numC 0)))
+                     mt-env
+                     mt-store))
+      (numV 2))
+
