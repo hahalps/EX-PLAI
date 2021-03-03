@@ -91,6 +91,16 @@ class SubstV implements ListVisitorI {
 
 }
 
+class AddBeforEmpty implements ListVisitorI {
+    public MyList forEmpty() {
+        return new ConsList(0, new EmptyList());
+    }
+
+    public MyList forCons(Object o, MyList l) {
+        return new ConsList(o, l.accept(this));
+    }
+}
+
 class Visitor {
     public static void main(String[] args) {
         MyList l = new ConsList(1, new EmptyList());
@@ -99,6 +109,7 @@ class Visitor {
         SubstV s = new SubstV(4, 2);
         System.out.println(t.accept(s));
         System.out.println(t.accept(new RemV(2)));
+        System.out.println(t.accept(new AddBeforEmpty()));
     }
 }
 
