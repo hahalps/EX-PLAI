@@ -1,0 +1,4 @@
+read : (if i hava free time)
+1, Paul Wilson’s survey
+2, GC book written by Richard Jones.
+3, Simple Generational Garbage Collection and Fast Allocation.
