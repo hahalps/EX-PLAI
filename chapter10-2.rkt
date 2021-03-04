@@ -129,6 +129,96 @@
 
 (test (msg a-tree 'add) (+ 10 5 15 6))
 
+;; Classes
+(define (node/size parent-maker v l r)
+  (let ([parent-object (parent-maker v l r)]
+        [self 'dummy])
+    (begin
+      (set! self
+            (lambda (m)
+              (case m
+                [(size) (lambda () (+ 1
+                                     (msg l 'size)
+                                     (msg r 'size)))]
+                [else (parent-object m)])))
+      self)))
+ 
+(define (mt/size parent-maker)
+  (let ([parent-object (parent-maker)]
+        [self 'dummy])
+    (begin
+      (set! self
+            (lambda (m)
+              (case m
+                [(size) (lambda () 0)]
+                [else (parent-object m)])))
+      self)))
+
+(define a-tree/size
+  (node/size node
+             10
+             (node/size node 5 (mt/size mt) (mt/size mt))
+             (node/size node 15
+                        (node/size node 6 (mt/size mt) (mt/size mt))
+                        (mt/size mt))))
+
+(test (msg a-tree/size 'add) (+ 10 5 15 6))
+(test (msg a-tree/size 'size) 4)
+
+;; test for open recursion problem
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;; wrong implementation ;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;(define (parent-node)
+;  (let ([self 'dummy])
+;    (begin (set! self
+;                 (lambda(m)
+;                   (case m
+;                     [(p1) (lambda() (msg self 'p2 1))]
+;                     [(p2) (lambda(n) (+ n 1))])))
+;           self)))
+;
+;(define (son-node parent-maker)
+;  (let ([parent-object (parent-maker)]
+;        [self 'dummy])
+;    (begin (set! self
+;                 (lambda(m)
+;                   (case m
+;                     [(p2) (lambda(n) (+ n 2))]
+;                     [else (parent-object m)])))
+;           self)))
+;
+;(test (msg (son-node parent-node) 'p1) 3)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;; correct implementation ;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (parent-node)
+  (let ([self 'dummy])
+    (lambda(o m)
+      (begin (set! self o)
+             (case m
+               [(p1) (lambda() (msg/open self 'p2 1))]
+               [(p2) (lambda(n) (+ n 1))])))))
+
+(define (son-node parent-maker)
+  (let ([parent-object (parent-maker)]
+        [self 'dummy])
+    (lambda(o m)
+      (begin (set! self o)
+             (case m
+               [(p2) (lambda(n) (+ n 2))]
+               [else (parent-object o m)])))))
+
+(define (msg/open o m . a)
+  (apply (o o m) a))
+
+(test (msg/open (son-node parent-node) 'p1) 3)
+(test (msg/open (parent-node) 'p1) 2)
+         
+
 
 
 
