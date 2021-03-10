@@ -85,3 +85,20 @@
 
 (test (run (cps (with (x 1) (+ x 2)))) 3)
 (test (run (cps (with (x 1) (seq (set x 2) (+ x 2))))) 4)
+
+
+(run (lambda (k)
+       ((lambda (k)
+          ((lambda (k)
+             ((lambda (k)
+                (k "First")) (lambda (pv)
+                               (read-number/suspend pv k))))
+           (lambda (lv)
+             ((lambda (k)
+                ((lambda (k)
+                   (k "Second")) (lambda (pv)
+                                   (read-number/suspend pv k))))
+              (lambda (rv)
+                (k (+ lv rv)))))))
+        (lambda (ov)
+          (k (display ov))))))
